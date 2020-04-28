@@ -1,0 +1,296 @@
+import json
+import random
+import time
+from datetime import datetime,timedelta
+import csv
+import os.path
+from os import path
+
+listword=[]
+all_days=[]
+mainlist=[]
+ 
+def main():
+   
+    #Extracting the data from a json file
+    file_json="PyAutoAITest/testing.json"
+    data= datafile(file_json)
+    generaldata=data['GeneralConfig']
+    initial_date=generaldata['StartDate']
+    final_date=generaldata['EndDate']
+    isweekend=random.choice(generaldata['isWeekend'])
+
+    startdate = None
+    enddate=None
+    # Type Checking of the Date
+    if isinstance(initial_date,str) and isinstance(final_date,str): 
+        try:
+            startdate=datetime.strptime(initial_date,'%d-%m-%Y').date()
+        except ValueError:
+            print("Error:Start Date Format is not Correct. Required format: DD-MM-YYYY")
+            exit(1)
+
+        try:
+            enddate=datetime.strptime(final_date,'%d-%m-%Y').date()
+        except ValueError:
+            print("Error:End Date Format is not Correct. Required format: DD-MM-YYYY")
+            exit(1)
+
+    else:
+        print("Error: Dates Should Be in a String")
+        exit(1)
+        
+        # To Store the dates for which the data is to be generated
+    all_days= dategeneration(startdate,enddate,isweekend)
+        
+    storing_csv = data['GeneralConfig']['outputFileName']
+    # Temporary list to store the data 
+    templist=[]
+
+    #Counter for AccessID
+    access_id_counter = 1
+
+    #Loop for Assigning the Number of Days the Program has to run
+    for current_date in all_days:
+        date_val=current_date.strftime('%d-%m-%Y')
+        #Access the dictionary of user data from the json
+        userlist=data['LOB']['UserGroup']['UserDetails']
+   
+        for user_key, user_data in userlist.items():
+
+            # Acquiring the user id,machine no and displayname
+            user_id=user_data['UserId']
+            user_machine=user_data['MachineNo']
+            user_displayname=user_data['DisplayName']
+
+            # Fetching all available access from JSON File
+            all_available_access = data['AccessTypeConfig']
+
+            for access_key, access_data in all_available_access.items():
+                # Acquiring the IP,Service,Start Date,End Date for the Available
+                user_ip_value = access_data['IPAddress']
+                user_service = access_data['ServiceId']
+                initial_timing=access_data['StartTime']
+                ending_timing=access_data['EndTime']
+                # Type Checking of the Timing 
+                if isinstance(initial_timing,str) and isinstance(ending_timing,str):
+                    try:
+                        time.strptime(initial_timing, '%H:%M:%S')
+                        start_date=date_val + ' ' + initial_timing
+                    except ValueError:
+                        print("Error:Start Time Format is not Correct. Required format= H:M:S")
+                        exit(1)
+                    try:
+                        time.strptime(ending_timing, '%H:%M:%S')
+                        end_date=date_val + ' ' + ending_timing
+                    except ValueError:
+                        print("Error:End Time Format is not Correct. Required format= H:M:S")
+                        exit(1)    
+                    min_command_per_session=data['GeneralConfig']['Min_no_commands_per_session'] 
+                    max_command_per_session=data['GeneralConfig']['Max_no_commands_per_session']  
+                    
+                    min_command=data['GeneralConfig']['MinimumCommands_percommand'] 
+                    max_command=data['GeneralConfig']['MaximumCommands_percommand'] 
+                    word_data=data['CommandConfig']['listOfCommands']    
+                    rand_no= integer_random(min_command_per_session,max_command_per_session)  
+            
+                    #Loop Runs for Generation of Random Command For A particular time interval
+                    for l in range(rand_no):
+                        templist=[]
+
+                        # Random Datetime generation in the assigned slot of date and time  
+                        rand_datetime = str(randomDateTime(start_date,end_date))
+                        # Random word of command:generation
+                        listword=randomWord_fromlist(min_command,max_command,word_data)
+
+                        # Below the list appends all the columns of Data Generated
+                        templist.append(user_id)       
+                        templist.append(user_machine)
+                        templist.append("GroupID")
+                        templist.append("LOB")
+                        templist.append(user_displayname)  
+                        templist.append(user_ip_value)
+                        templist.append("AccessId "+str(access_id_counter))
+                        templist.append(user_service)      
+                        templist.append(rand_datetime)
+                        templist.append(listword)
+                        
+                        # A new list stores all the data from temporary list  
+                        mainlist.append(templist)
+                        
+                    access_id_counter += 1  
+                else:
+                    print("Error: Timing Should Be in A String")
+                    exit(1)
+    # Function for storing the data into a csv
+    writeToCSV(storing_csv, mainlist)
+        
+def randomDateTime(starttime,endtime):
+    '''
+    This function takes in 2 dates and returns a random date in between
+
+    Arguments:
+        starttime:It is the start date time from which a random time slot has to be generated
+        endtime:It is the end date time till which a random time slot has to be generated
+
+    Returns:
+        It Returns the random datetime generated in the slot in between starttime and endtime
+    
+    Author:Ambika Maheshwari
+    '''
+    if isinstance(starttime,str) and isinstance(endtime,str):
+        frmt='%d-%m-%Y %H:%M:%S'   
+        stime = time.mktime(time.strptime(starttime, frmt))
+        etime = time.mktime(time.strptime(endtime, frmt))
+        ptime = stime + random.random() * (etime - stime)
+        timedate = datetime.fromtimestamp(time.mktime(time.localtime(ptime)))
+        # Returning the random time date 
+        return timedate
+    
+    else:
+        print("Error: Expected String For Time")
+        exit(1)
+def integer_random(min_command_per_session,max_command_per_session):
+    '''
+    This function takes in 2 integers and gives a random integer in between
+
+    Arguments:
+        min_command_per_session:It is the minimum number of commands to be taken at random per session
+        max_command_per_session:It is the maximum number of commands to be taken at random per session
+
+    Returns:
+        It Returns the random no generated in the between min_command and max_command
+
+    Author:Ambika Maheshwari
+    '''
+    if isinstance(min_command_per_session,int) and isinstance(max_command_per_session,int):
+        randomno=random.randint(min_command_per_session,max_command_per_session)
+        return(randomno)
+    else:
+        print("Error: Integer Expected For Command No.")
+        exit(1)
+def randomWord_fromlist(min_command,max_command,word_data):
+    '''
+    This function takes in command list and prints a random word of the command
+
+    Arguments:
+        min_command:It is the minimum number of commands to be taken at random
+        max_command:It is the maximum number of commands to be taken at random
+        word_data:It is the list which contains the words of the commands
+      
+    Returns:
+        It Returns a list with random no of generated words of commands    
+    
+    Author:Ambika Maheshwari
+    '''
+    if isinstance(word_data,list):
+        listword = []
+        rand_no= integer_random(min_command,max_command)
+        for j in range(rand_no): 
+            word_val=command_fromlist(word_data)
+            listword.append(word_val)
+            new_list='  '.join(listword)
+        return(new_list)
+            
+    else:
+        print("Error: Command Data Should be a List")
+        exit(1)
+
+def command_fromlist(word_data):
+    '''
+    This function takes in command list and returns a random command
+
+    Arguments:
+        word_data:It is the list which contains the words of the commands
+      
+    Returns:
+        It returns a random word from the list of words
+    
+    Author:Ambika Maheshwari
+    '''
+    if isinstance(word_data,list):
+        commandval=random.choice(word_data)
+        if isinstance(commandval,str):
+            return(commandval)
+        else:
+            print("Error: Contents of list should be String")
+            exit(1)
+    else:
+        print("Error:For Command Data List Expected")
+        exit(1)
+
+def datafile(file_json):
+    '''
+    This function returns the data json
+    
+    Arguments:
+        file_json:It is the string which stores the json file path
+       
+    Returns:
+        It Returns the contents of the json file
+    
+    Author:Ambika Maheshwari
+    '''
+    if isinstance(file_json,str):
+        if path.exists(file_json):
+            file_data = open(file_json)  
+            data = json.load(file_data)
+            return(data)
+        else:
+            print("File Path Does Not Exist")
+            exit(1)
+    else:
+        print("Error:File Expected in String Format")
+        exit(1)
+
+def writeToCSV(csv_file_name, storing_csv):
+    '''
+    This function stores the data into a csv
+
+    Arguments:
+        csv_file_name:It is the location where the output csv is stored 
+        storing_csv: It is the list that needs to be stored inside the csv 
+    
+    Author:Ambika Maheshwari
+    '''
+    with open(csv_file_name,"w", newline='') as csv_file :
+        writer = csv.writer(csv_file)
+        writer.writerows(storing_csv)
+
+def dategeneration(startdate,enddate,isweekend):
+    '''
+    This function takes in start date and end date and gives all the dates in between them
+
+    Arguments:
+        startdate:It is the starting date from when the data has to be generated
+        enddate:It is the ending date till when the data has to be generated
+        isweekend:It is the condition for whether weekend is needed or not
+
+    Returns:
+        It Returns a list with all dates in between the startdate and enddate
+    
+    Author:Ambika Maheshwari
+    '''
+    next_day = startdate
+    while True:
+        if next_day > enddate:
+            break
+        currentday=next_day.strftime("%A")
+        # Checking the Weekend Condition if required
+        if isweekend=='False':
+            if (currentday=='Saturday' or currentday=='Sunday'):
+                next_day +=timedelta(days=1)
+            else:
+                all_days.append(next_day)
+                next_day +=timedelta(days=1)
+
+        elif isweekend=='True':
+            if next_day > enddate:
+                break
+
+            all_days.append(next_day)
+            next_day +=timedelta(days=1)
+    return(all_days)
+
+if __name__ == "__main__":
+    main() 
